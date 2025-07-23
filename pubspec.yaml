@@ -1,0 +1,17 @@
+name: dart_rpc
+description: Remote procedure calls over a websocket
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  dart_msgpack:
+    path: ../dart-msgpack
+  dart_websocket:
+    path: ../dart-websocket
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.24.0
