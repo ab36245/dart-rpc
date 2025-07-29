@@ -1,13 +1,11 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dart_msgpack/dart_msgpack.dart';
+import 'package:dart_rpc/src/exception.dart';
 import 'package:dart_websocket/dart_websocket.dart';
+import 'package:logger/logger.dart';
 
 import 'call.dart';
-import 'util.dart';
-
-const controlChannelId = 0; // Must agree with server
 
 // These must agree with the rpc server
 const newFlag     = 0x01;
@@ -27,7 +25,11 @@ class RpcClient {
   }
 
   void send(Uint8List bytes) {
-    _output.sink.add(bytes);
+    final l = Logger();
+    l.t('sending cid ${bytes[0]}');
+    l.t('sending flags ${bytes[1]}');
+    l.t('sending hid ${bytes[2]}');
+    _socket.writeBinary(bytes);
   }
 
   final _calls = <int, RpcCall>{};
@@ -36,76 +38,69 @@ class RpcClient {
 
   var _nextId = 0;
 
-  final _output = StreamController<Uint8List>();
-  
-  final _readers = <int, StreamController<Uint8List>>{};
-
   final WebSocket _socket;
 
   int _getCid() {
+    final l = Logger();
+    l.t('allocating id $_nextId');
     return _nextId++;
   }
 
   void _init() async {
     _doInput();
-    _doOutput();
   }
 
   void _doInput() async {
-    final m = 'Client._doInput';
-    print('$m: starting');
-    await for (final msg in _socket.stream) {
-      print('$m: read message ${msg.runtimeType}');
-      if (msg is! Uint8List) {
-        print('$m: can\'t handle ${m.runtimeType} msgs');
-        break;
+    final l = Logger();
+    l.i('starting');
+    try {
+      await for (final msg in _socket.stream) {
+        _doInputMsg(msg);
       }
-      print('$m: read binary message ${msg.length} bytes');
-      final mpd = MsgPackDecoder(msg);
-
-      print('$m: reading call id (cid)');
-      final cid = mpd.getUint();
-      print('$m: call id $cid');
-
-      print('$m: reading flags');
-      final flags = mpd.getUint();
-      print('$m: flags $flags');
-      
-      RpcCall call;
-      if (flags & newFlag == newFlag) {
-        print('$m: new flag set');
-        if (_calls.containsKey(cid)) {
-          print('$m: cid $cid already in use');
-          throw 'yikes';
-        }
-
-        final hid = mpd.getUint();
-        print('$m: his is $hid');
-        // TODO
-      } else {
-        if (!_calls.containsKey(cid)) {
-          print('$m: unknown cid $cid');
-          throw 'yikes';
-        }
-        call = _calls[cid]!;
-        call.recv(flags, mpd);
-      }
+    } on RpcException catch(e) {
+      l.e('an error occurred: $e');
     }
-    print('$m: shutting down connection');
+    l.i('shutting down connection');
     _closing = true;
-    for (final entry in _readers.entries) {
-      print('$m: closing channel ${entry.key} reader');
-      await entry.value.close();
-    }
   }
 
-  void _doOutput() async {
-    final m = 'Client._doOutput';
-    print('$m: starting');
-    await for (final bytes in _output.stream) {
-      print('$m: output ${bytes.length} bytes');
-      _socket.writeBinary(bytes);
+  void _doInputMsg(dynamic msg) {
+    final l = Logger();
+    l.t('read message ${msg.runtimeType}');
+    if (msg is! Uint8List) {
+      throw RpcException('can\'t handle ${msg.runtimeType} msgs');
     }
-    print('$m: output stream is closed');
+    l.t('read binary message ${msg.length} bytes');
+    final mpd = MsgPackDecoder(msg);
+
+    l.t('reading call id (cid)');
+    final cid = mpd.getUint();
+    l.t('call id $cid');
+
+    l.t('reading flags');
+    final flags = mpd.getUint();
+    l.t('flags $flags');
+      
+    RpcCall call;
+    if (flags & newFlag == newFlag) {
+      l.t('new flag set');
+      if (_calls.containsKey(cid)) {
+        final mesg = 'cid $cid already in use';
+        throw RpcException(mesg);
+      }
+
+      final hid = mpd.getUint();
+      l.t('his is $hid');
+      // TODO
+      final mesg = 'not implemented';
+      throw RpcException(mesg);
+    } else {
+      if (!_calls.containsKey(cid)) {
+        final mesg = 'cid $cid does not exist';
+        throw RpcException(mesg);
+      }
+      call = _calls[cid]!;
+      call.recv(flags, mpd);
+    }
   }
 }
