@@ -24,11 +24,11 @@ class RpcClient {
     return call;
   }
 
+  void close(RpcCall call) {
+    _calls.remove(call.cid);
+  }
+
   void send(Uint8List bytes) {
-    final l = Logger();
-    l.t('sending cid ${bytes[0]}');
-    l.t('sending flags ${bytes[1]}');
-    l.t('sending hid ${bytes[2]}');
     _socket.writeBinary(bytes);
   }
 

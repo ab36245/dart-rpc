@@ -20,10 +20,18 @@ class RpcCall {
 
   Stream<RpcResponse> get responses =>
     _responses.stream;
+      
+  void close() {
+    _responses.sink.close();
+    client.close(this);
+  }
 
   void recv(int flags, MsgPackDecoder mpd) {
     final response = RpcResponse(this, mpd.bytes);
     _responses.sink.add(response);
+    if (flags & closedFlag == closedFlag) {
+      close();
+    }
   }
 
   void send(RpcRequest req) {
